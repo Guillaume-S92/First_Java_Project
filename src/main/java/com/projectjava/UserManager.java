@@ -4,6 +4,8 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.result.DeleteResult;
+
 import org.bson.Document;
 
 public class UserManager {
@@ -34,4 +36,27 @@ public class UserManager {
             e.printStackTrace();
         }
     }
+
+    public boolean authenticateUser(String username, String password) {
+        Document query = new Document("username", username).append("password", password);
+
+        long count = userCollection.countDocuments(query);
+
+        return count == 1;
+    }
+
+    public boolean deleteUser(String username) {
+        Document query = new Document("username", username);
+
+        try {
+            DeleteResult result = userCollection.deleteOne(query);
+            System.out.println("Deleted " + result.getDeletedCount() + " user(s) successfully.");
+            return result.getDeletedCount() == 1;
+        } catch (Exception e) {
+            System.err.println("Failed to delete user. Error: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
 }

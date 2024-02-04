@@ -16,7 +16,6 @@ import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.util.HashMap;
 import java.util.Map;
 
 public class SimpleServer {
@@ -29,6 +28,8 @@ public class SimpleServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", new MyHandler());
         server.createContext("/register", new RegisterHandler());
+        server.createContext("/login", new LoginHandler());
+        server.createContext("/delete", new DeleteHandler());
         server.setExecutor(null);
         System.out.println("Server is running on port " + port);
 
@@ -77,7 +78,7 @@ public class SimpleServer {
                 BufferedReader br = new BufferedReader(isr);
                 String query = br.readLine();
 
-                Map<String, String> params = getParams(query);
+                Map<String, String> params = HttpUtils.getParams(query);
 
                 String username = params.get("username");
                 String password = params.get("password");
@@ -108,19 +109,84 @@ public class SimpleServer {
                 t.close();
             }
         }
+    }
 
-        private Map<String, String> getParams(String query) {
-            Map<String, String> params = new HashMap<>();
-            if (query != null) {
-                String[] pairs = query.split("&");
-                for (String pair : pairs) {
-                    String[] keyValue = pair.split("=");
-                    if (keyValue.length == 2) {
-                        params.put(keyValue[0], keyValue[1]);
-                    }
+    // Modify the LoginHandler class
+    static class LoginHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+            if ("POST".equals(t.getRequestMethod())) {
+                InputStreamReader isr = new InputStreamReader(t.getRequestBody(), "utf-8");
+                BufferedReader br = new BufferedReader(isr);
+                String query = br.readLine();
+
+                Map<String, String> params = HttpUtils.getParams(query);
+
+                String username = params.get("username");
+                String password = params.get("password");
+
+                System.out.println("Received POST request to login user:");
+                System.out.println("Username: " + username);
+                System.out.println("Password: " + password);
+
+                UserManager userManager = SimpleServer.userManager;
+                boolean loginSuccessful = userManager.authenticateUser(username, password);
+
+                String response;
+                if (loginSuccessful) {
+                    response = "Login successful!";
+                } else {
+                    response = "Login failed. Please check your username and password.";
                 }
+
+                t.sendResponseHeaders(200, response.length());
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } else if ("GET".equals(t.getRequestMethod())) {
+                String response = "This is the login page.";
+                t.sendResponseHeaders(200, response.length());
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } else {
+                t.sendResponseHeaders(405, 0);
+                t.close();
             }
-            return params;
         }
     }
+
+    static class DeleteHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+            if ("DELETE".equals(t.getRequestMethod())) {
+                // Obtenez les paramètres de la requête
+                String query = t.getRequestURI().getQuery();
+                Map<String, String> params = HttpUtils.getParams(query);
+
+                // Récupérez le nom d'utilisateur à supprimer
+                String usernameToDelete = params.get("username");
+
+                // Appelez la méthode de suppression de l'utilisateur
+                boolean deletionSuccessful = SimpleServer.userManager.deleteUser(usernameToDelete);
+
+                // Envoyez la réponse en fonction du succès de la suppression
+                String response;
+                if (deletionSuccessful) {
+                    response = "User deletion successful!";
+                } else {
+                    response = "User deletion failed. Please check the username.";
+                }
+
+                t.sendResponseHeaders(200, response.length());
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } else {
+                t.sendResponseHeaders(405, 0);
+                t.close();
+            }
+        }
+    }
+
 }
