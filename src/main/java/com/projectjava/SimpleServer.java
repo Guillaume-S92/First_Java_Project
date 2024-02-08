@@ -16,12 +16,17 @@ import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.security.Key;
 import java.util.Map;
+
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 
 public class SimpleServer {
 
-    private static final UserManager userManager = new UserManager();
-    private static MongoClient mongoClient; // Déclaration en dehors du bloc try
+    private static final Key jwtKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    private static final UserManager userManager = new UserManager(jwtKey);
+    private static MongoClient mongoClient;
 
     public static void main(String[] args) throws IOException {
         int port = 3001;
@@ -29,17 +34,15 @@ public class SimpleServer {
         server.createContext("/", new MyHandler());
         server.createContext("/register", new RegisterHandler());
         server.createContext("/login", new LoginHandler());
+        server.createContext("/logout", new LogoutHandler());
         server.createContext("/delete", new DeleteHandler());
         server.setExecutor(null);
         System.out.println("Server is running on port " + port);
 
-        // Connexion à MongoDB (une seule instance)
         try {
-            mongoClient = MongoClients
-                    .create("mongodb+srv://Guillaume:test@cluster0.pfjuogp.mongodb.net/javaserver");
+            mongoClient = MongoClients.create("mongodb+srv://Guillaume:test@cluster0.pfjuogp.mongodb.net/javaserver");
             MongoDatabase database = mongoClient.getDatabase("javaserver");
 
-            // Ajouter un index unique sur le champ "username"
             MongoCollection<Document> userCollection = database.getCollection("users");
             userCollection.createIndex(Indexes.ascending("username"), new IndexOptions().unique(true));
 
@@ -49,7 +52,6 @@ public class SimpleServer {
             e.printStackTrace();
         }
 
-        // Ajouter le hook de fermeture de la connexion MongoDB
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (mongoClient != null) {
                 mongoClient.close();
@@ -134,7 +136,9 @@ public class SimpleServer {
 
                 String response;
                 if (loginSuccessful) {
-                    response = "Login successful!";
+                    // Générer un jeton d'authentification lors de la connexion réussie
+                    String authToken = userManager.generateAuthToken(username);
+                    response = "Login successful! AuthToken: " + authToken;
                 } else {
                     response = "Login failed. Please check your username and password.";
                 }
@@ -156,26 +160,64 @@ public class SimpleServer {
         }
     }
 
+    static class LogoutHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange t) throws IOException {
+            if ("POST".equals(t.getRequestMethod())) {
+                InputStreamReader isr = new InputStreamReader(t.getRequestBody(), "utf-8");
+                BufferedReader br = new BufferedReader(isr);
+                String query = br.readLine();
+
+                Map<String, String> params = HttpUtils.getParams(query);
+
+                String username = params.get("username");
+                String authToken = params.get("authToken");
+
+                // Appelez la méthode de déconnexion de l'utilisateur avec authentification
+                boolean logoutSuccessful = SimpleServer.userManager.logoutUser(username, authToken);
+
+                // Envoyez la réponse en fonction du succès de la déconnexion
+                String response;
+                if (logoutSuccessful) {
+                    response = "Logout successful!";
+                } else {
+                    response = "Logout failed. Please check the username or authentication token.";
+                }
+
+                t.sendResponseHeaders(200, response.length());
+                OutputStream os = t.getResponseBody();
+                os.write(response.getBytes());
+                os.close();
+            } else {
+                t.sendResponseHeaders(405, 0);
+                t.close();
+            }
+        }
+    }
+
     static class DeleteHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange t) throws IOException {
             if ("DELETE".equals(t.getRequestMethod())) {
-                // Obtenez les paramètres de la requête
-                String query = t.getRequestURI().getQuery();
+                InputStreamReader isr = new InputStreamReader(t.getRequestBody(), "utf-8");
+                BufferedReader br = new BufferedReader(isr);
+                String query = br.readLine();
+
                 Map<String, String> params = HttpUtils.getParams(query);
 
-                // Récupérez le nom d'utilisateur à supprimer
+                // Récupérez le nom d'utilisateur à supprimer et le jeton d'authentification
                 String usernameToDelete = params.get("username");
+                String authToken = params.get("authToken");
 
-                // Appelez la méthode de suppression de l'utilisateur
-                boolean deletionSuccessful = SimpleServer.userManager.deleteUser(usernameToDelete);
+                // Appelez la méthode de suppression de l'utilisateur avec authentification
+                boolean deletionSuccessful = SimpleServer.userManager.deleteUser(usernameToDelete, authToken);
 
                 // Envoyez la réponse en fonction du succès de la suppression
                 String response;
                 if (deletionSuccessful) {
                     response = "User deletion successful!";
                 } else {
-                    response = "User deletion failed. Please check the username.";
+                    response = "User deletion failed. Please check the username or authentication token.";
                 }
 
                 t.sendResponseHeaders(200, response.length());
