@@ -40,7 +40,8 @@ public class SimpleServer {
         System.out.println("Server is running on port " + port);
 
         try {
-            mongoClient = MongoClients.create("mongodb+srv://Guillaume:test@cluster0.pfjuogp.mongodb.net/javaserver");
+            mongoClient = MongoClients
+                    .create("mongodb+srv://username:password@cluster0.pfjuogp.mongodb.net/javaserver");
             MongoDatabase database = mongoClient.getDatabase("javaserver");
 
             MongoCollection<Document> userCollection = database.getCollection("users");

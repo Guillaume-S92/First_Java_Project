@@ -21,7 +21,7 @@ public class UserManager {
         this.jwtKey = jwtKey;
 
         MongoClient mongoClient = MongoClients
-                .create("mongodb+srv://Guillaume:test@cluster0.pfjuogp.mongodb.net/javaserver");
+                .create("mongodb+srv://username:password@cluster0.pfjuogp.mongodb.net/javaserver");
         MongoDatabase database = mongoClient.getDatabase("javaserver");
 
         userCollection = database.getCollection("users");
